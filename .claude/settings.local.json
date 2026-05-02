@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake -G \"MinGW Makefiles\" -DCMAKE_PREFIX_PATH=\"C:/Qt/6.11.0/mingw_64\" -DCMAKE_BUILD_TYPE=Debug ../..)",
+      "Read(//c/Qt/6.11.0/mingw_64/bin/**)",
+      "Read(//c/Program Files/CMake/bin/**)",
+      "Read(//c/Qt/**)",
+      "Bash(\"/c/Qt/Tools/CMake_64/bin/cmake\" -G \"MinGW Makefiles\" -DCMAKE_PREFIX_PATH=\"C:/Qt/6.11.0/mingw_64\" -DCMAKE_BUILD_TYPE=Debug ../..)",
+      "Bash(\"/c/Qt/Tools/CMake_64/bin/cmake\" --build .)"
+    ]
+  }
+}
