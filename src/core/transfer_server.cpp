@@ -148,8 +148,12 @@ void transfer_server::on_handshake_data()
                 return;
             }
 
+            // 断开 transfer_server 与此 socket 的所有信号连接,
+            // 后续由 file_receiver 全权接管
+            socket->disconnect(this);
+
             // 创建文件接收器, 由它接管该 TCP 连接的生命周期
-            current_receiver_ = new file_receiver(socket, this);
+            current_receiver_ = new file_receiver(socket, pending_meta_.file_size, this);
 
             // 信号转发: 将 file_receiver 的信号连接到 transfer_server 的信号
             connect(current_receiver_, &file_receiver::progress,
@@ -166,6 +170,13 @@ void transfer_server::on_handshake_data()
             });
 
             pending_sockets_.remove(socket);                    // 从待握手队列移除
+
+            // 本地回环时二进制块可能在 file_receiver 创建前就已到达缓冲区,
+            // 此时 readyRead 不会再次触发, 需要手动驱动接收器处理滞留数据
+            if (socket->bytesAvailable() > 0)
+            {
+                QMetaObject::invokeMethod(current_receiver_, "read_data", Qt::QueuedConnection);
+            }
 
             emit file_proposal(pending_sender_name_,            // 通知 UI: 有文件传输请求
                                pending_meta_.file_name,

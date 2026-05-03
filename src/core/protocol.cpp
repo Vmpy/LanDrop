@@ -121,6 +121,14 @@ QByteArray protocol::build_reject(const QString &reason)
     return build_json_packet(obj);
 }
 
+// 构建接受包 (接收方同意接收, 发送方收到后开始传输数据块)
+QByteArray protocol::build_accept()
+{
+    QJsonObject obj;
+    obj["type"] = "accept";                     // 报文类型: 接受
+    return build_json_packet(obj);
+}
+
 // 将原始字节数组解析为 QJsonObject
 QJsonObject protocol::parse_json(const QByteArray &data)
 {

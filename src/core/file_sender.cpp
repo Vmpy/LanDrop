@@ -114,14 +114,14 @@ void file_sender::send_file(const QString &file_path)
     QByteArray meta = protocol::build_file_meta(info.fileName(), file_size_);
     socket_->write(meta);
 
-    sending_ = true;                                            // 标记发送状态
-    timeout_timer_->start();                                    // 启动超时监控
-    send_timer_->start();                                       // 开始分块发送
+    waiting_for_accept_ = true;                                 // 等待接收方确认接受
+    timeout_timer_->start();                                    // 启动超时监控 (等待 accept 或超时)
 }
 
 void file_sender::cancel()
 {
     sending_ = false;                                           // 取消发送状态
+    waiting_for_accept_ = false;                                // 取消等待接受
     send_timer_->stop();                                        // 停止发送定时器
     timeout_timer_->stop();                                     // 停止超时定时器
 
@@ -161,11 +161,7 @@ void file_sender::on_ready_read()
         {
             handshake_done_ = true;                             // 标记握手完成
             emit connected();                                   // 通知 UI 连接就绪
-
-            if (!current_file_path_.isEmpty())                  // 有等待发送的文件
-            {
-                send_file(current_file_path_);                  // 自动开始发送
-            }
+            // send_file 由 connected 信号接收方调用, 此处不再重复调用
         }
         else if (type == "ack")                                 // 接收确认
         {
@@ -176,6 +172,16 @@ void file_sender::on_ready_read()
         {
             qint64 missing_seq = json["seq"].toVariant().toLongLong();
             handle_nack(missing_seq);
+        }
+        else if (type == "accept")                              // 接收方确认接受
+        {
+            if (waiting_for_accept_)
+            {
+                waiting_for_accept_ = false;
+                sending_ = true;                                // 开始发送数据块
+                timeout_timer_->start();                        // 重置超时监控
+                send_timer_->start();                           // 启动分块发送
+            }
         }
         else if (type == "reject")                              // 接收方拒绝
         {
@@ -252,6 +258,8 @@ void file_sender::send_chunk(qint64 seq, const QByteArray &data)
     QByteArray chunk = protocol::build_chunk(seq, data);        // 构建二进制块
     socket_->write(chunk);                                      // 写入套接字
     unacked_chunks_[seq] = data;                                // 保存原始数据到未确认列表 (用于重传)
+    bytes_sent_ += data.size();                                 // 累加已发送字节
+    emit progress(bytes_sent_, file_size_);                     // 通知 UI 进度更新
     timeout_timer_->start();                                    // 重置超时定时器
 }
 
@@ -283,6 +291,13 @@ void file_sender::handle_nack(qint64 missing_seq)
 
 void file_sender::check_timeout()
 {
+    if (waiting_for_accept_)                                    // 等待 accept 超时
+    {
+        emit error("Accept timeout");                           // 通知 UI: 接收方未确认
+        cancel();
+        return;
+    }
+
     if (unacked_chunks_.isEmpty())                              // 无未确认块, 不算超时
     {
         return;

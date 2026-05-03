@@ -61,6 +61,9 @@ public:
     // 构建拒绝包: 携带拒绝原因 (用户拒绝/接收方忙碌/非法数据包)
     static QByteArray build_reject(const QString &reason);
 
+    // 构建接受包: 接收方同意接收后发送, 发送方收到后才开始传输数据块
+    static QByteArray build_accept();
+
     // ====== JSON 解析方法 ======
 
     // 将原始字节数组解析为 JSON 对象

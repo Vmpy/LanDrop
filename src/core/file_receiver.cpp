@@ -18,9 +18,10 @@ namespace landrop
 namespace core
 {
 
-file_receiver::file_receiver(QTcpSocket *socket, QObject *parent)
+file_receiver::file_receiver(QTcpSocket *socket, qint64 file_size, QObject *parent)
     : QObject(parent)
     , socket_(socket)
+    , file_size_(file_size)
 {
     socket_->setParent(this);                                   // 套接字所有权转移给本对象
 
@@ -54,6 +55,28 @@ void file_receiver::accept(const QString &save_path)
         emit error(QStringLiteral("无法创建文件: %1").arg(save_path));
         socket_->write(protocol::build_reject("Cannot create file"));
         socket_->disconnectFromHost();                          // 断开连接
+        return;
+    }
+
+    socket_->write(protocol::build_accept());                   // 通知发送方: 已确认接受, 开始传输数据块
+
+    // 写入 accept 前已到达并缓存的数据块 (正常情况下为空, 保留作为安全网)
+    if (!pending_payloads_.isEmpty())
+    {
+        file_->write(pending_payloads_);
+        file_->flush();
+        pending_payloads_.clear();
+    }
+
+    // 如果全部数据已在 accept 前到达, 直接完成
+    if (bytes_received_ >= file_size_)
+    {
+        QString path = file_->fileName();
+        file_->close();
+        file_ = nullptr;                                        // 清空指针, 防止析构时 abort() 误删文件
+        emit finished(path);
+        socket_->disconnectFromHost();
+        deleteLater();
         return;
     }
 
@@ -150,6 +173,10 @@ void file_receiver::process_chunk(const QByteArray &chunk_data)
         file_->write(info.payload);                             // 写入载荷数据
         file_->flush();                                         // 立即刷盘
     }
+    else                                                        // 尚未 accept, 缓存载荷
+    {
+        pending_payloads_.append(info.payload);
+    }
 
     bytes_received_ += info.len;                                // 累加已接收字节
     expected_seq_ = info.seq + 1;                               // 下一个期望序号
@@ -170,14 +197,16 @@ void file_receiver::process_chunk(const QByteArray &chunk_data)
         ack_timer_->stop();                                     // 停止 ACK 定时器
         timeout_timer_->stop();                                 // 停止超时定时器
 
-        if (file_)
+        if (file_)                                              // 已 accept, 正常完成
         {
             QString path = file_->fileName();
             file_->close();                                     // 关闭文件
+            file_ = nullptr;                                    // 清空指针, 防止析构时 abort() 误删文件
             emit finished(path);                                // 通知 UI 接收完成
+            socket_->disconnectFromHost();                      // 关闭 TCP 连接
+            deleteLater();                                      // 自我销毁
         }
-        socket_->disconnectFromHost();                          // 关闭 TCP 连接
-        deleteLater();                                          // 自我销毁
+        // 否则: 全部数据已到达但用户尚未 accept, 保持连接等待 accept
     }
 }
 

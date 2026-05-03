@@ -97,7 +97,8 @@ private:
 
     QHash<qint64, QByteArray> unacked_chunks_;  // 未确认的块: key=序号, value=原始数据 (用于重传)
     bool handshake_done_ = false;               // 握手是否完成
-    bool sending_ = false;                      // 是否正在发送
+    bool waiting_for_accept_ = false;           // 等待接收方 accept (file_meta 已发送, 等待接收方确认)
+    bool sending_ = false;                      // 是否正在发送数据块
 };
 
 } // namespace core

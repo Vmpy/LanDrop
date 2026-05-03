@@ -25,7 +25,7 @@ class file_receiver : public QObject
     Q_OBJECT
 
 public:
-    explicit file_receiver(QTcpSocket *socket, QObject *parent = nullptr);
+    explicit file_receiver(QTcpSocket *socket, qint64 file_size, QObject *parent = nullptr);
     ~file_receiver() override;
 
     // 用户接受传输后调用: 创建文件并开始写入数据
@@ -80,6 +80,7 @@ private:
 
     QList<qint64> missing_seqs_;            // 缺失的块序号列表 (用于 NACK 请求)
     QByteArray buffer_;                     // 接收缓冲区 (拼接不完整的数据块)
+    QByteArray pending_payloads_;           // accept 前缓存的已校验载荷, accept 后写入文件并清空
 };
 
 } // namespace core
